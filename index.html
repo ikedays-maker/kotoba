@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>こえを もじに する アプリ</title>
+<style>
+  body {
+    font-family: "ヒラギノ角ゴ Pro W3", "Hiragino Kaku Gothic Pro", メイリオ, Meiryo, sans-serif;
+    background-color: #f4f9ff;
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: #333;
+  }
+  h1 {
+    font-size: 28px;
+    color: #2c3e50;
+    margin: 0 0 10px 0;
+  }
+  .status-badge {
+    font-size: 14px;
+    padding: 6px 16px;
+    border-radius: 15px;
+    background-color: #fff3cd;
+    color: #856404;
+    margin-bottom: 15px;
+    font-weight: bold;
+  }
+  .controls {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .mode-btn {
+    font-size: 20px;
+    padding: 10px 24px;
+    border: 3px solid #3498db;
+    background-color: #fff;
+    color: #3498db;
+    border-radius: 25px;
+    cursor: pointer;
+    font-weight: bold;
+  }
+  .mode-btn.active {
+    background-color: #3498db;
+    color: #fff;
+  }
+  .mic-btn {
+    width: 320px;
+    height: 90px;
+    font-size: 26px;
+    font-weight: bold;
+    color: white;
+    background-color: #2ecc71;
+    border: none;
+    border-radius: 45px;
+    cursor: pointer;
+    box-shadow: 0 6px #27ae60;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+  .mic-btn:active {
+    box-shadow: 0 2px #27ae60;
+    transform: translateY(4px);
+  }
+  .mic-btn.recording {
+    background-color: #e74c3c;
+    box-shadow: 0 6px #c0392b;
+  }
+  .display-box {
+    width: 95%;
+    max-width: 800px;
+    min-height: 180px;
+    background-color: #ffffff;
+    border: 4px solid #3498db;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    margin-bottom: 25px;
+    text-align: center;
+    box-sizing: border-box;
+  }
+  .result-text {
+    font-size: 64px;
+    font-weight: bold;
+    line-height: 1.3;
+    word-break: break-all;
+    color: #111;
+  }
+  .placeholder {
+    color: #aaa;
+    font-size: 24px;
+  }
+  .history-section {
+    width: 95%;
+    max-width: 800px;
+    background-color: #ffffff;
+    border-radius: 15px;
+    padding: 15px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    box-sizing: border-box;
+  }
+  .history-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: #7f8c8d;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .clear-btn {
+    font-size: 14px;
+    padding: 6px 12px;
+    background-color: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .history-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .history-item {
+    background-color: #e8f4f8;
+    border: 2px solid #bce8f1;
+    padding: 8px 16px;
+    border-radius: 12px;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  .history-item:hover {
+    background-color: #d4edda;
+  }
+</style>
+</head>
+<body>
+
+<h1>こえを もじに する アプリ</h1>
+
+<!-- じゅんび状況 -->
+<div class="status-badge" id="status-badge">🎤 マイクの「きょか」を おしてね</div>
+
+<!-- モード切り替え -->
+<div class="controls">
+  <button class="mode-btn active" id="btn-hiragana" onclick="setMode('hiragana')">ひらがな</button>
+  <button class="mode-btn" id="btn-katakana" onclick="setMode('katakana')">カタカナ</button>
+</div>
+
+<!-- マイクボタン -->
+<button class="mic-btn" id="mic-btn" onclick="toggleSpeech()">
+  <span id="mic-icon">🎤</span> <span id="mic-text">おして はなす</span>
+</button>
+
+<!-- 巨大文字表示エリア -->
+<div class="display-box">
+  <div class="result-text" id="result-text">
+    <span class="placeholder">「おして はなす」を おしてね</span>
+  </div>
+</div>
+
+<!-- 履歴表示エリア -->
+<div class="history-section">
+  <div class="history-title">
+    <span>これまで はなした ことば（おすと おおきくなるよ）</span>
+    <button class="clear-btn" onclick="clearHistory()">ぜんぶ けす</button>
+  </div>
+  <div class="history-list" id="history-list"></div>
+</div>
+
+<script>
+  let recognition;
+  let isRecording = false;
+  let currentMode = 'hiragana';
+  let rawText = '';
+  let countdownTimer = null;
+  let timeLeft = 10; // 10秒に延長
+
+  // ページを開いた瞬間にマイクの許可を要求する処理
+  window.addEventListener('DOMContentLoaded', async () => {
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // 許可が得られたらマイクのストリームを一度閉じる
+        stream.getTracks().forEach(track => track.stop());
+        
+        const badge = document.getElementById('status-badge');
+        badge.style.backgroundColor = '#d4edda';
+        badge.style.color = '#155724';
+        badge.innerText = '✅ じゅんび OK！「おして はなす」を おしてね';
+      }
+    } catch (err) {
+      const badge = document.getElementById('status-badge');
+      badge.style.backgroundColor = '#f8d7da';
+      badge.style.color = '#721c24';
+      badge.innerText = '⚠️ 上にでる「きょか」ボタンを おしてね';
+    }
+  });
+
+  if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRecognition();
+    recognition.lang = 'ja-JP';
+    recognition.interimResults = true;
+    recognition.continuous = true;
+
+    recognition.onresult = function(event) {
+      let transcript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        transcript += event.results[i][0].transcript;
+      }
+      if (transcript.trim()) {
+        rawText = transcript;
+        document.getElementById('result-text').innerText = formatText(rawText);
+      }
+    };
+
+    recognition.onerror = function(event) {
+      if (event.error === 'not-allowed') {
+        alert('マイクが つかえません。がめんの 上にでる「きょか」を おしてね。');
+      }
+      stopRecordingManual();
+    };
+
+    recognition.onend = function() {
+      if (isRecording && timeLeft > 0) {
+        try { recognition.start(); } catch(e) {}
+      }
+    };
+  } else {
+    alert('Chromeブラウザで開いてください。');
+  }
+
+  function toggleSpeech() {
+    if (isRecording) {
+      stopRecordingManual();
+    } else {
+      startRecordingWithTimer();
+    }
+  }
+
+  function startRecordingWithTimer() {
+    rawText = '';
+    isRecording = true;
+    timeLeft = 10; // 10秒カウントダウン
+    updateMicButton();
+    document.getElementById('result-text').innerHTML = `<span class="placeholder">きいています... (あと ${timeLeft}びょう)</span>`;
+
+    try {
+      recognition.start();
+    } catch(e) {
+      console.error(e);
+    }
+
+    clearInterval(countdownTimer);
+    countdownTimer = setInterval(() => {
+      timeLeft--;
+      if (timeLeft > 0) {
+        if (isRecording && !rawText) {
+          document.getElementById('result-text').innerHTML = `<span class="placeholder">きいています... (あと ${timeLeft}びょう)</span>`;
+        }
+      } else {
+        stopRecordingManual();
+      }
+    }, 1000);
+  }
+
+  function stopRecordingManual() {
+    isRecording = false;
+    clearInterval(countdownTimer);
+    updateMicButton();
+    try { recognition.stop(); } catch(e) {}
+
+    if (!rawText.trim()) {
+      document.getElementById('result-text').innerText = 'うまく ききとれませんでした';
+      return;
+    }
+
+    let formatted = formatText(rawText);
+    document.getElementById('result-text').innerText = formatted;
+    addToHistory(formatted);
+  }
+
+  function updateMicButton() {
+    const btn = document.getElementById('mic-btn');
+    const icon = document.getElementById('mic-icon');
+    const text = document.getElementById('mic-text');
+
+    if (isRecording) {
+      btn.classList.add('recording');
+      icon.innerText = '⏹️';
+      text.innerText = 'おわったら おす';
+    } else {
+      btn.classList.remove('recording');
+      icon.innerText = '🎤';
+      text.innerText = 'おして はなす';
+    }
+  }
+
+  function setMode(mode) {
+    currentMode = mode;
+    document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById('btn-' + mode).classList.add('active');
+    
+    if (rawText) {
+      document.getElementById('result-text').innerText = formatText(rawText);
+    }
+  }
+
+  function formatText(text) {
+    if (!text) return '';
+    if (currentMode === 'katakana') {
+      return hiraToKata(text);
+    } else if (currentMode === 'hiragana') {
+      return kataToHira(text);
+    }
+    return text;
+  }
+
+  function hiraToKata(str) {
+    return str.replace(/[\u3041-\u3096]/g, match => String.fromCharCode(match.charCodeAt(0) + 0x60));
+  }
+
+  function kataToHira(str) {
+    return str.replace(/[\u30A1-\u30F6]/g, match => String.fromCharCode(match.charCodeAt(0) - 0x60));
+  }
+
+  function addToHistory(text) {
+    if (!text) return;
+    const list = document.getElementById('history-list');
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    item.innerText = text;
+    item.onclick = function() {
+      document.getElementById('result-text').innerText = text;
+    };
+    list.prepend(item);
+  }
+
+  function clearHistory() {
+    document.getElementById('history-list').innerHTML = '';
+  }
+</script>
+
+</body>
+</html>
